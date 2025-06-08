@@ -146,11 +146,11 @@ if uploaded_file:
                     "model": st.session_state.selected_model
                 })
 
-                # Store QA
-                q_key = question.strip().lower()
-                if q_key not in st.session_state.qa_log:
-                    st.session_state.qa_log[q_key] = {}
-                st.session_state.qa_log[q_key][st.session_state.selected_model] = answer.strip()
+                if question:
+                    q_key = question.strip().lower()
+                    if q_key not in st.session_state.qa_log:
+                        st.session_state.qa_log[q_key] = {}
+                    st.session_state.qa_log[q_key][st.session_state.selected_model] = answer.strip()
 
     # --- Process manual question input ---
     if question := st.chat_input("Ask a question about the document:"):
@@ -169,20 +169,21 @@ if uploaded_file:
                     "model": st.session_state.selected_model
                 })
 
-                # Store QA
-                q_key = question.strip().lower()
-                if q_key not in st.session_state.qa_log:
-                    st.session_state.qa_log[q_key] = {}
-                st.session_state.qa_log[q_key][st.session_state.selected_model] = answer.strip()
+                if question:
+                    q_key = question.strip().lower()
+                    if q_key not in st.session_state.qa_log:
+                        st.session_state.qa_log[q_key] = {}
+                    st.session_state.qa_log[q_key][st.session_state.selected_model] = answer.strip()
 
     # --- Evaluation UI ---
     with st.expander("🧪 Evaluate Model Answers with BLEU / ROUGE"):
         reference_answer = st.text_area("Enter the reference answer for the last question:", key="ref_input")
-        if reference_answer:
+        q_eval_key = list(st.session_state.qa_log.keys())[-1] if st.session_state.qa_log else None
+
+        if reference_answer and q_eval_key:
             if not metrics_available:
                 st.error("Please install `nltk` and `rouge-score` packages.")
             else:
-                q_eval_key = question.strip().lower()
                 st.markdown("### 📊 Model Evaluation Scores")
                 for mname, moutput in st.session_state.qa_log[q_eval_key].items():
                     scores = evaluate_answer(reference_answer, moutput)
