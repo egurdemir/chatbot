@@ -1,7 +1,6 @@
 import streamlit as st
 import os
-import tempfile
-import numpy as np 
+import numpy as np
 
 from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -9,6 +8,13 @@ from langchain_ollama import OllamaEmbeddings, OllamaLLM
 from langchain_community.vectorstores import InMemoryVectorStore
 from langchain.prompts import PromptTemplate
 
+# Optional metrics
+try:
+    from nltk.translate.bleu_score import sentence_bleu
+    from rouge_score import rouge_scorer
+    metrics_available = True
+except ImportError:
+    metrics_available = False
 
 # --- Session State Initialization ---
 if "selected_model" not in st.session_state:
@@ -16,6 +22,9 @@ if "selected_model" not in st.session_state:
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
+
+if "qa_log" not in st.session_state:
+    st.session_state.qa_log = {}
 
 # --- Ollama Components ---
 embeddings = OllamaEmbeddings(model="nomic-embed-text")
@@ -55,28 +64,33 @@ def answer_question(question, context):
     chain = prompt | model
     return chain.invoke({"question": question, "context": context})
 
+def evaluate_answer(reference, candidate):
+    ref_tokens = reference.lower().split()
+    cand_tokens = candidate.lower().split()
+    bleu = sentence_bleu([ref_tokens], cand_tokens)
+    scorer = rouge_scorer.RougeScorer(['rouge1', 'rougeL'], use_stemmer=True)
+    rouge = scorer.score(reference, candidate)
+    return {
+        "BLEU": round(bleu, 4),
+        "ROUGE-1 F1": round(rouge['rouge1'].fmeasure, 4),
+        "ROUGE-L F1": round(rouge['rougeL'].fmeasure, 4),
+    }
 
 # --- Streamlit App ---
 st.set_page_config(page_title="PDF Chatbot", page_icon="🧠")
 st.title("PDF Question Answering Chatbot with LLaMa 3, Gemma 3, and DeepSeek R1")
 st.write("Upload a PDF document and ask questions about its content. Compare answers from different models.")
 
-
 # --- Sidebar ---
 with st.sidebar:
     st.header("Choose a Model")
-    if st.button("Use LLaMA 3") and st.session_state.selected_model != "llama3":
+    if st.button("Use LLaMA 3"):
         st.session_state.selected_model = "llama3"
-
-    if st.button("Use Gemma 3") and st.session_state.selected_model != "gemma3":
+    if st.button("Use Gemma 3"):
         st.session_state.selected_model = "gemma3"
-
-    if st.button("Use DeepSeek R1") and st.session_state.selected_model != "deepseek-r1":
-         st.session_state.selected_model = "deepseek-r1"
-  
-
+    if st.button("Use DeepSeek R1"):
+        st.session_state.selected_model = "deepseek-r1"
     st.markdown(f"**Current model:** `{st.session_state.selected_model}`")
-
 
     st.header("Example Questions")
     examples = [
@@ -96,7 +110,7 @@ if uploaded_file:
     with open("temp_file.pdf", "wb") as f:
         f.write(uploaded_file.read())
     file_path = "temp_file.pdf"
-    
+
     with st.spinner("Loading and processing document..."):
         documents = load_document(file_path)
         if documents:
@@ -108,7 +122,7 @@ if uploaded_file:
         with st.chat_message(msg["role"]):
             if msg["role"] == "assistant":
                 model_tag = msg.get("model", "unknown")
-                st.markdown(f"** ({model_tag})**: {msg['content']}")
+                st.markdown(f"**({model_tag})**: {msg['content']}")
             else:
                 st.markdown(msg["content"])
 
@@ -132,6 +146,12 @@ if uploaded_file:
                     "model": st.session_state.selected_model
                 })
 
+                # Store QA
+                q_key = question.strip().lower()
+                if q_key not in st.session_state.qa_log:
+                    st.session_state.qa_log[q_key] = {}
+                st.session_state.qa_log[q_key][st.session_state.selected_model] = answer.strip()
+
     # --- Process manual question input ---
     if question := st.chat_input("Ask a question about the document:"):
         st.session_state.messages.append({"role": "user", "content": question})
@@ -149,5 +169,24 @@ if uploaded_file:
                     "model": st.session_state.selected_model
                 })
 
-    os.remove(file_path)
+                # Store QA
+                q_key = question.strip().lower()
+                if q_key not in st.session_state.qa_log:
+                    st.session_state.qa_log[q_key] = {}
+                st.session_state.qa_log[q_key][st.session_state.selected_model] = answer.strip()
 
+    # --- Evaluation UI ---
+    with st.expander("🧪 Evaluate Model Answers with BLEU / ROUGE"):
+        reference_answer = st.text_area("Enter the reference answer for the last question:", key="ref_input")
+        if reference_answer:
+            if not metrics_available:
+                st.error("Please install `nltk` and `rouge-score` packages.")
+            else:
+                q_eval_key = question.strip().lower()
+                st.markdown("### 📊 Model Evaluation Scores")
+                for mname, moutput in st.session_state.qa_log[q_eval_key].items():
+                    scores = evaluate_answer(reference_answer, moutput)
+                    st.markdown(f"**Model: `{mname}`**")
+                    st.json(scores)
+
+    os.remove(file_path)
