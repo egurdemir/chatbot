@@ -177,7 +177,13 @@ if uploaded_file:
 
     # --- Evaluation UI ---
     with st.expander("🧪 Evaluate Model Answers with BLEU / ROUGE"):
-        reference_answer = st.text_area("Enter the reference answer for the last question:", key="ref_input")
+        # reference_answer = st.text_area("Enter the reference answer for the last question:", key="ref_input")
+        reference_answer = """"
+        Yıldız Teknik Üniversitesi öğrencileri; insan haklarına saygılı, dürüst, erdemli ve sosyal sorumluluk sahibi bireylerdir. 
+        Akademik dürüstlük ilkesine uyar, kopya ve intihal gibi etik dışı davranışlardan kaçınırlar. Grup çalışmalarında iş birliği yapar, 
+        başkalarının emeğinden haksız kazanç sağlamazlar. Danışmanlara doğru bilgi verir, kayıt ve sınavlarda adil davranırlar. 
+        Ayrımcılık yapmaz, farklılıklara saygılıdır. Tüm kişisel verilerin gizliliğine ve güvenliğe özen gösterirler.
+        """ 
         q_eval_key = list(st.session_state.qa_log.keys())[-1] if st.session_state.qa_log else None
 
         if reference_answer and q_eval_key:
